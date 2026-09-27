@@ -1,0 +1,62 @@
+name: Build LiveTranscriber IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build unsigned iOS app
+        run: |
+          xcodebuild \
+            -quiet \
+            -project LiveTranscriber.xcodeproj \
+            -scheme LiveTranscriber \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Find built app
+        run: |
+          find build/DerivedData/Build/Products -name "*.app" -type d
+
+      - name: Create IPA
+        run: |
+          APP=$(find build/DerivedData/Build/Products -path "*iphoneos/*.app" -type d | head -1)
+
+          if [ -z "$APP" ]; then
+            echo "ERROR: No iPhone .app was found"
+            exit 1
+          fi
+
+          echo "Using app: $APP"
+
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+
+          zip -r LiveTranscriber-unsigned.ipa Payload
+
+      - name: Verify IPA
+        run: |
+          unzip -l LiveTranscriber-unsigned.ipa | head -30
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: LiveTranscriber-unsigned-IPA
+          path: LiveTranscriber-unsigned.ipa
+          if-no-files-found: error
